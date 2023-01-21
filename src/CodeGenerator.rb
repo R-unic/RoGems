@@ -303,6 +303,7 @@ class CodeGenerator
     end
 
     def walk_ast(node, *extra_data)
+        # if stmts, loops, array literals
         if node.is_a?(Parser::AST::Node) then
             case node.type
             when :float, :int # literals
@@ -330,7 +331,7 @@ class CodeGenerator
                     if child.is_a?(Parser::AST::Node) then
                         case child.type
                         when :send
-                            self.walk_ast(child)
+                            self.walk_ast(child, *extra_data)
                         when :str
                             self.walk_ast(child)
                             @output << idx == node.children.length ? "" : ", "
@@ -419,7 +420,7 @@ class CodeGenerator
                 name, val = *node.children
                 @output << (node.type == :lvasgn ? "local " : "") << (node.type == :gvasgn ? name.gsub!("$", "") : name.to_s) << " = "
                 if val.is_a?(Parser::AST::Node) then
-                    self.walk_ast(val)
+                    self.walk_ast(val, *extra_data)
                 else
                     @output << val.children[0].to_s
                 end
@@ -433,7 +434,7 @@ class CodeGenerator
                 location = self.get_iv_location_name(var_name, readers, writers, accessors, statics)
                 self.instancevar_assign(node, location)
             else
-                puts "unhandled ast node: #{node}"
+                puts "unhandled ast node: #{node.type}"
             end
         elsif node.is_a?(Symbol) then
             @output << " #{node.to_s} "
