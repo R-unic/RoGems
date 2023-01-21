@@ -5,6 +5,6 @@ require "Transpiler"
 
 file = File.read(File.join(File.join(File.dirname(__FILE__), ".."), "rogems.json"))
 config = JSON.parse(file)
-cwd = config["compilationDir"]
+cwd = config["rootDir"]
 transpiler = Transpiler.new(File.join(cwd, "src"), File.join(cwd, "out"))
 transpiler.transpile
