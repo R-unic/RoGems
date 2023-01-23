@@ -2,5 +2,5 @@
     "rootDir": "examples/example/",
     "sourceDir": "src",
     "outDir": "out",
-    "debugging": true
+    "debugging": false
 }
