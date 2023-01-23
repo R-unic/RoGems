@@ -1,3 +1,6 @@
 {
-    "rootDir": "examples/example/"
+    "rootDir": "examples/example/",
+    "sourceDir": "src",
+    "outDir": "out",
+    "debugging": true
 }

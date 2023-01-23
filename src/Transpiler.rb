@@ -2,9 +2,12 @@ require "CodeGenerator"
 require "Exceptions"
 
 class Transpiler
-	def initialize(input_dir, output_dir)
-		@input_dir = input_dir
-		@output_dir = output_dir
+	def initialize(config)
+		cwd = File.join(Dir.pwd, config["rootDir"])
+		@input_dir = File.join(cwd, config["sourceDir"])
+		@output_dir = File.join(cwd, config["outDir"])
+		@config = config
+
 		if !Dir.exist?(@input_dir) then
 			raise Exceptions::NoInputDirError.new(@input_dir)
 		end
@@ -20,9 +23,9 @@ class Transpiler
 			input_file = File.join(@input_dir, file_name)
 			output_file = File.join(@output_dir, file_name.gsub(/\.[^.]+$/, '.lua'))
 
-			code_generator = CodeGenerator.new(File.read(input_file))
+			code_generator = CodeGenerator.new(@config, File.read(input_file))
 			output_code = code_generator.generate
-			File.write(output_file, output_code.gsub("", ""))
+			File.write(output_file, output_code.gsub("", "").gsub("", "").gsub("", ""))
 		end
 	end
 end

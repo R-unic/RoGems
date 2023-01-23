@@ -9,4 +9,9 @@ module Exceptions
             super("No output directory '#{searched}' found.")
         end
     end
+    class UnsupportedBitOpError < Exception
+        def initialize(op)
+            super("Unsupported bitwise operator: '#{op}'")
+        end
+    end
 end

@@ -1,3 +1,4 @@
+require "Exceptions"
 require "parser/current"
 # opt-in to most recent AST format:
 Parser::Builders::Default.emit_lambda              = true
@@ -12,16 +13,23 @@ Parser::Builders::Default.emit_match_pattern       = true
 class CodeGenerator
     attr_reader :output
 
-    def initialize(source)
+    def initialize(config, source)
         @source = source
+        @debug_mode = !config["debugging"].nil? && config["debugging"] == true
         @output = ""
         @block = 0
         @line = 0
     end
 
     def generate()
+        @output << (@debug_mode ? "-- " : "")
+        @output << "local ruby = require(game.ReplicatedStorage.RubyLib)"
+        self.newline
+        self.newline
+
         root_node = Parser::CurrentRuby.parse(@source)
         self.walk_ast(root_node)
+        puts root_node
         @output
     end
 
@@ -45,6 +53,242 @@ class CodeGenerator
         @block -= 1
         self.newline
         @output << "end"
+    end
+
+    def walk_ast(node, *extra_data)
+        # loops, array literals, symbol literals, static class members
+        if node.is_a?(Parser::AST::Node) then
+            case node.type
+            when :float, :int # literals
+                @output << node.children[0].to_s
+            when :str
+                content = node.children[0].to_s
+                @output << self.quote_surround(content)
+            when :array
+                idx = 1
+                @output << "{"
+                node.children.each do |child|
+                    self.walk_ast(child)
+                    @output << (idx == node.children.length ? "" : ", ")
+                    idx += 1
+                end
+                @output << "}"
+            when :if # control flow
+                add_end = extra_data[0]
+                condition, block, elseif = *node.children
+                @output << "if "
+                self.walk_ast(condition)
+                @output << " then"
+                self.block
+                self.newline
+                self.walk_ast(block)
+
+                if !elseif.nil? then
+                    @block -= 1
+                    self.newline
+                    @output << "else"
+                    if elseif.type == :if then
+                        self.walk_ast(elseif, false)
+                    else
+                        # @block -= 1
+                        self.block
+                        self.newline
+                        self.walk_ast(elseif)
+                    end
+                end
+                if add_end.nil? && add_end != false then
+                    self.end
+                end
+            when :while
+                condition, block = *node.children
+                @output << "while "
+                self.walk_ast(condition)
+                @output << " do"
+                self.block
+                self.newline
+                self.walk_ast(block)
+                self.end
+            when :until
+                condition, block = *node.children
+                @output << "repeat "
+                self.block
+                self.newline
+                self.walk_ast(block)
+
+                @block -= 1
+                self.newline
+                @output << "until "
+                self.walk_ast(condition)
+            when :irange
+                min, max = *node.children
+                self.walk_ast(min)
+                @output << ", "
+                self.walk_ast(max)
+            when :for
+                symbol, iterable, block = *node.children
+                var_name = symbol.type == :mlhs ? symbol.children.map { |s| s.children[0].to_s }.join(", ") : symbol.children[0].to_s
+
+                @output << "for #{iterable.type == :irange ? var_name : "_, " + var_name}"
+                if iterable.type == :irange then
+                    @output << " = "
+                    self.walk_ast(iterable)
+                else
+                    @output << " in pairs("
+                    self.walk_ast(iterable)
+                    @output << ")"
+                end
+                @output << " do"
+                self.block
+                self.newline
+                self.walk_ast(block)
+                self.end
+            when :break
+                @output << "break"
+            when :and # conditionals
+                left_op, right_op = *node.children
+                @output << "("
+                self.walk_ast(left_op)
+                @output << ") and ("
+                self.walk_ast(right_op)
+                @output << ")"
+            when :send # operations
+                if node.children[1] == :attr_accessor || node.children[1] == :attr_reader || node.children[1] == :attr_writer || node.children[1] == :include then return end
+
+                dont_emit_function_check = extra_data[0]
+                not_function = extra_data[1]
+                is_assignment = node.children[1].to_s.include?("=")
+                op = self.is_op?(node.children[1].to_s)
+                first_child = node.children[0]
+                do_function_check = (dont_emit_function_check || false) == false && !is_assignment && !op && first_child && first_child.type == :lvar
+                if do_function_check then
+                    current_line = @output.split("\n")[@line]
+                    if current_line.nil? then
+                        @output << "local _ = "
+                    end
+                    @output << "type("
+                end
+                idx = 1
+                node.children.each do |child|
+                    if child.is_a?(Parser::AST::Node) then
+                        case child.type
+                        when :send
+                            self.walk_ast(child, *extra_data)
+                        when :str
+                            self.walk_ast(child)
+                            @output << (idx == node.children.length ? "" : ", ")
+                        when :int, :float
+                            self.walk_ast(child)
+                        when :lvar
+                            self.walk_ast(child, node)
+                        # when :cvar
+                        when :ivar
+                            var_name = child.children[0].to_s.gsub("@", "")
+                            readers, writers, accessors, statics = *extra_data
+                            readers.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
+                            writers.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
+                            accessors.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
+                            statics.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
+                            location = self.get_iv_location_name(var_name, readers, writers, accessors, statics) || "private."
+                            @output << "self." << location << var_name
+                        when :const
+                            @output << child.children[1].to_s
+                        else
+                            var_name = child.children[0].to_s.strip
+                            @output << var_name
+                        end
+                    elsif child == :puts then
+                        @output << "print("
+                    elsif child == :new then
+                        @output << ".new("
+                    else
+                        sym = child.to_s
+                        @output << self.check_operator(sym)
+                        if first_child && first_child.type == :lvar && !do_function_check && !not_function && !is_assignment && !op then
+                            args = [*node.children]
+                            args.shift(2)
+                            @output << "(#{args.join(", ")})"
+                        end
+                    end
+                    idx += 1
+                end
+                if do_function_check then
+                    @output << ") == \"function\" and "
+                    self.walk_ast(node, true)
+                    @output << " or "
+                    self.walk_ast(node, true, true)
+                end
+                if node.children[1] == :puts || node.children[1] == :new then
+                    @output << ")"
+                end
+            when :module # module defs
+                self.module_def(node)
+            when :class # class defs
+                self.class_def(node)
+            when :begin # blocks
+                idx = 1
+                dont_return_nodes = [:ivasgn, :class, :module, :def, :puts, :if, :while, :until, :for, :break]
+                node.children.each do |child|
+                    if idx == node.children.length && child.children[1] != :puts && !dont_return_nodes.include?(child.type) then
+                        @output << "return "
+                    end
+                    if child.is_a?(Parser::AST::Node) then
+                        self.walk_ast(child, *extra_data)
+                    end
+                    if idx != node.children.length then
+                        self.newline
+                    end
+                    idx += 1
+                end
+            when :def # defs
+                def_name = node.children[0]
+                args = node.children[1].children
+                arg_list = args.map { |arg| arg.children[0] }.join(", ")
+                block = node.children[2]
+                class_name = extra_data[4]
+                if def_name == :initialize then return end
+                self.writeln("function #{class_name.nil? ? "" : class_name + ":"}#{def_name.to_s}(#{arg_list})")
+                self.block
+                if !block.nil? then
+                    self.walk_ast(block, *extra_data)
+                end
+                self.end
+            when :masgn
+                self.multiple_assign(node)
+            when :op_asgn # op assignment
+                name_node, op, val = *node.children
+                var_name = name_node.children[0].to_s
+                @output << var_name  << (@debug_mode ? " = #{var_name} #{op.to_s} " : " #{op.to_s}= ")
+                if val.is_a?(Parser::AST::Node) then
+                    self.walk_ast(val, *extra_data)
+                else
+                    @output << val.children[0].to_s
+                end
+            when :lvasgn, :gvasgn # local var assignment
+                name, val = *node.children
+                @output << (node.type == :lvasgn ? "local " : "") << (node.type == :gvasgn ? name.gsub!("$", "") : name.to_s) << " = "
+                if val.is_a?(Parser::AST::Node) then
+                    self.walk_ast(val, *extra_data)
+                else
+                    @output << val.children[0].to_s
+                end
+            when :ivasgn
+                var_name = node.children[0].to_s.gsub("@", "")
+                readers, writers, accessors, statics = extra_data
+                readers.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
+                writers.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
+                accessors.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
+                statics.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
+                location = self.get_iv_location_name(var_name, readers, writers, accessors, statics)
+                self.instancevar_assign(node, location)
+            when :lvar # variable indexing
+                self.index_var(node, extra_data[0])
+            else
+                warn("unhandled ast node: #{node.type}")
+            end
+        elsif node.is_a?(Symbol) then
+            @output << " #{node.to_s} "
+        end
+        @last_line = @line
     end
 
     def primary_privates(inited_privates)
@@ -293,152 +537,27 @@ class CodeGenerator
         end
     end
 
+    def is_op?(str)
+        operators = %w(+ - * / += -= *= /= %= **= % ** & | ^ > >= < <= == === != =~ !~ && ||)
+        return operators.include?(str.strip)
+    end
+
     def check_operator(str)
-        operators = %w(+ - * / % ** & | ^ > >= < <= == === != =~ !~ && ||)
-        if operators.include?(str)
-            " #{str} "
+        if self.is_op?(str)
+            if str == "=~" || str == "!~" || str == "^" || str == "&" || str == "|" then
+                raise Exceptions::UnsupportedBitOpError.new
+            end
+            " #{str.gsub("!=", "~=").gsub("**", "^").gsub("===", "==").gsub("&&", "and").gsub("||", "or")} "
         else
             str
         end
     end
 
-    def walk_ast(node, *extra_data)
-        # if stmts, loops, array literals
-        if node.is_a?(Parser::AST::Node) then
-            case node.type
-            when :float, :int # literals
-                @output << node.children[0].to_s
-            when :str
-                content = node.children[0].to_s
-                @output << self.quote_surround(content)
-            when :send # operations
-                if node.children[1] == :attr_accessor || node.children[1] == :attr_reader || node.children[1] == :attr_writer || node.children[1] == :include then return end
-
-                dont_emit_function_check = extra_data[0]
-                not_function = extra_data[1]
-                is_assignment = node.children[1].to_s.include?("=")
-                first_child = node.children[0]
-                do_function_check = (dont_emit_function_check || false) == false && !is_assignment && first_child && first_child.type == :lvar
-                if do_function_check then
-                    current_line = @output.split("\n")[@line]
-                    if current_line.nil? then
-                        @output << "local _ = "
-                    end
-                    @output << "type("
-                end
-                idx = 1
-                node.children.each do |child|
-                    if child.is_a?(Parser::AST::Node) then
-                        case child.type
-                        when :send
-                            self.walk_ast(child, *extra_data)
-                        when :str
-                            self.walk_ast(child)
-                            @output << idx == node.children.length ? "" : ", "
-                        when :lvar
-                            @output << child.children[0].to_s.strip
-                            if node.children[0].type == :lvar then
-                                @output << (do_function_check || (not_function || false) == true || is_assignment ? "." : ":")
-                            end
-                        # when :cvar
-                        when :ivar
-                            var_name = child.children[0].to_s.gsub("@", "")
-                            readers, writers, accessors, statics = *extra_data
-                            readers.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
-                            writers.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
-                            accessors.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
-                            statics.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
-                            location = self.get_iv_location_name(var_name, readers, writers, accessors, statics) || "private."
-                            @output << "self." << location << var_name
-                        when :const
-                            @output << child.children[1].to_s
-                        else
-                            var_name = child.children[0].to_s.strip
-                            @output << var_name
-                        end
-                    elsif child == :puts then
-                        @output << "print("
-                    elsif child == :new then
-                        @output << ".new("
-                    else
-                        sym = child.to_s
-                        if sym.include?("=") then
-                            sym = sym.gsub!("=", "") + " = "
-                        end
-                        @output << self.check_operator(sym)
-                        if first_child && first_child.type == :lvar && !do_function_check && !not_function && !is_assignment then
-                            args = [*node.children]
-                            args.shift(2)
-                            @output << "(#{args.join(", ")})"
-                        end
-                    end
-                    idx += 1
-                end
-                if do_function_check then
-                    @output << ") == \"function\" and "
-                    self.walk_ast(node, true)
-                    @output << " or "
-                    self.walk_ast(node, true, true)
-                end
-                if node.children[1] == :puts || node.children[1] == :new then
-                    @output << ")"
-                end
-            when :module # module defs
-                self.module_def(node)
-            when :class # class defs
-                self.class_def(node)
-            when :begin # blocks
-                idx = 1
-                node.children.each do |child|
-                    if idx == node.children.length && child.type != :ivasgn && child.type != :class  && child.type != :module && child.type != :def && child.type != :puts && child.children[1] != :puts then
-                        @output << "return "
-                    end
-                    if child.is_a?(Parser::AST::Node) then
-                        self.walk_ast(child, *extra_data)
-                    end
-                    if idx != node.children.length then
-                        self.newline
-                    end
-                    idx += 1
-                end
-            when :def # defs
-                def_name = node.children[0]
-                args = node.children[1].children
-                arg_list = args.map { |arg| arg.children[0] }.join(", ")
-                block = node.children[2]
-                class_name = extra_data[4]
-                if def_name == :initialize then return end
-                self.writeln("function #{class_name.nil? ? "" : class_name + ":"}#{def_name.to_s}(#{arg_list})")
-                self.block
-                if !block.nil? then
-                    self.walk_ast(block, *extra_data)
-                end
-                self.end
-            when :masgn
-                self.multiple_assign(node)
-            when :lvasgn, :gvasgn # local var assignment
-                name, val = *node.children
-                @output << (node.type == :lvasgn ? "local " : "") << (node.type == :gvasgn ? name.gsub!("$", "") : name.to_s) << " = "
-                if val.is_a?(Parser::AST::Node) then
-                    self.walk_ast(val, *extra_data)
-                else
-                    @output << val.children[0].to_s
-                end
-            when :ivasgn
-                var_name = node.children[0].to_s.gsub("@", "")
-                readers, writers, accessors, statics = extra_data
-                readers.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
-                writers.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
-                accessors.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
-                statics.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
-                location = self.get_iv_location_name(var_name, readers, writers, accessors, statics)
-                self.instancevar_assign(node, location)
-            else
-                puts "unhandled ast node: #{node.type}"
-            end
-        elsif node.is_a?(Symbol) then
-            @output << " #{node.to_s} "
+    def index_var(node, parent)
+        @output << node.children[0].to_s.strip
+        is_var = !parent.nil? && parent.children[1].is_a?(Symbol) && !self.is_op?(parent.children[1].to_s)
+        if !parent.nil? && parent.children[0] && parent.children[0].type == :lvar && is_var then
+            @output << (do_function_check || (not_function || false) == true || is_assignment ? "." : ":")
         end
-        @last_line = @line
     end
 end
