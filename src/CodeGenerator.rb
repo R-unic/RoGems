@@ -151,6 +151,13 @@ class CodeGenerator
                 @output << ") and ("
                 self.walk_ast(right_op)
                 @output << ")"
+            when :or
+                left_op, right_op = *node.children
+                @output << "("
+                self.walk_ast(left_op)
+                @output << ") or ("
+                self.walk_ast(right_op)
+                @output << ")"
             when :send # operations
                 if node.children[1] == :attr_accessor || node.children[1] == :attr_reader || node.children[1] == :attr_writer || node.children[1] == :include then return end
 
