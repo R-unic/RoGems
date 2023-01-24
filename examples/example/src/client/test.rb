@@ -1,4 +1,9 @@
-while true do
-    next if is_odd?(5)
-    puts 5
+lava = script.Parent
+
+lava.Touched.Connect do |hit|
+    parent = hit.Parent
+    humanoid = parent.FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.TakeDamage(humanoid.Health)
+    end
 end
