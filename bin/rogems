@@ -1,4 +1,4 @@
 #!/usr/bin/env sh
-entry_point="src/main.rb"
+entry_point="src/RoGems.rb"
 base_dir=$(dirname $0)
 ruby "$base_dir/../$entry_point"
