@@ -1,0 +1,35 @@
+{
+  "name": "RoGems-Project",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "Ruby": {
+        "$className": "Folder",
+        "Common": {
+          "$path": "src/shared"
+        }
+      }
+    },
+
+    "ServerScriptService": {
+      "Ruby": {
+        "$className": "Folder",
+        "Server": {
+          "$path": "src/server"
+        }
+      }
+    },
+
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Ruby": {
+          "$className": "Folder",
+          "Client": {
+            "$path": "src/client"
+          }
+        }
+      }
+    }
+  }
+}

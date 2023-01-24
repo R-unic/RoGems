@@ -1,5 +1,4 @@
 require "CodeGenerator"
-require "Exceptions"
 
 class Transpiler
   	def initialize(config)

@@ -14,4 +14,14 @@ module Exceptions
             super("Unsupported bitwise operator: '#{op}'")
         end
     end
+    class TranspileError < Exception
+        def initialize(msg)
+            super("Cannot run RoGems: #{msg}")
+        end
+    end
+    class MissingConfigError < TranspileError
+        def initialize
+            super("Missing 'rogems.json' config file in directory")
+        end
+    end
 end

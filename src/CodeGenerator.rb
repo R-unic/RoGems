@@ -30,7 +30,9 @@ class CodeGenerator
 
         root_node = Parser::CurrentRuby.parse(@source)
         walk_ast(root_node)
-        puts root_node
+        if @debug_mode then
+            puts root_node
+        end
         @output
     end
 

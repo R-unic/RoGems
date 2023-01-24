@@ -1,5 +1,5 @@
 {
-    "rootDir": "examples/example/",
+    "rootDir": "./",
     "sourceDir": "src",
     "outDir": "out",
     "debugging": true
