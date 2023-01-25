@@ -1,4 +1,4 @@
--- local ruby = require(game.ReplicatedStorage.RubyLib)
+local ruby = require(game.ReplicatedStorage.RubyLib)
 
 local lava = script.Parent
 return (type(lava.Touched) == "function" and lava:Touched() or lava.Touched).Connect(function(hit)
