@@ -20,6 +20,9 @@ class CodeGenerator
         @output = ""
         @block = 0
         @line = 0
+
+        @function_aliases = [:each, :each_with_index]
+        @dont_return_nodes = [:lvasgn, :cvasgn, :ivasgn, :class, :module, :def, :puts, :if, :while, :until, :for, :break]
     end
 
     def generate()
@@ -197,9 +200,9 @@ class CodeGenerator
             when :class # class defs
                 class_def(node)
             when :begin # blocks
-                dont_return_nodes = [:lvasgn, :cvasgn, :ivasgn, :class, :module, :def, :puts, :if, :while, :until, :for, :break]
                 node.children.each do |child|
-                    if child == node.children.last && ((child.type == :send && !is_assignment?(child)) || child.children[1] != :puts) && !dont_return_nodes.include?(child.type) then
+                    has_aliased = has_aliased_method?(child)
+                    if child == node.children.last && ((child.type == :send && !is_assignment?(child)) || child.children[1] != :puts) && !@dont_return_nodes.include?(child.type) && !has_aliased then
                         write("return ")
                     end
                     if child.is_a?(Parser::AST::Node) then
@@ -230,15 +233,27 @@ class CodeGenerator
                 self.end
             when :block # lambdas
                 preceding, args_node, block = *node.children
-                walk_ast(preceding, nil, nil, true, preceding.children.last)
+                has_aliased_method, aliased_methods = *has_aliased_method?(preceding)
+                args = args_node.children.map { |a| a.children[0].is_a?(Parser::AST::Node) ? a.children[0].children[0].to_s : a.children[0].to_s }
+                walk_ast(preceding, nil, nil, true, preceding.children.last, args)
+                if !has_aliased_method then
 
-                args = args_node.children.map { |a| a.children[0].children[0].to_s }
-                write("(function(#{args.join(", ")})")
-                self.block
-                self.newline
-                walk_ast(block)
-                self.end
-                write(")")
+                    write("(function(#{args.join(", ")})")
+                    self.block
+                    self.newline
+                    walk_ast(block)
+                    self.end
+                    write(")")
+                end
+                if has_aliased_method then
+                    aliased_methods.each do |a|
+                        case a
+                        when :each, :each_with_index
+                            walk_ast(block)
+                            self.end
+                        end
+                    end
+                end
             when :block_pass # passing fns
                 block = node.children[0]
                 walk_ast(block)
@@ -306,17 +321,23 @@ class CodeGenerator
         end
     end
 
+    def is_guaranteed_function_call?(node, child, next_child)
+        op = is_op?(node.children[1].to_s)
+        is_assignment = is_assignment?(node)
+        !next_child.nil? && !op && child.is_a?(Symbol) && !is_assignment
+    end
+
     def send(node, *extra_data)
         if node.children[1] == :attr_accessor || node.children[1] == :attr_reader || node.children[1] == :attr_writer || node.children[1] == :include then return end
 
-        dont_emit_function_check, not_function, is_block, block_method = *extra_data
+        dont_emit_function_check, not_function, is_block, block_method, block_args = *extra_data
         is_assignment = is_assignment?(node)
-        op = self.is_op?(node.children[1].to_s)
+        op = is_op?(node.children[1].to_s)
         first_child = node.children[0]
         is_send = !first_child.nil? && first_child.is_a?(Parser::AST::Node) && first_child.children.length > 0 && !first_child.children[0].nil? && first_child.children[0].is_a?(Parser::AST::Node) && (first_child.children[0].type == :send || first_child.children[0].type == :lvar)
         child = node.children[node.children.length - 2]
         next_child = node.children.last
-        guaranteed_function_call = !next_child.nil? && !op && child.is_a?(Symbol) && !is_assignment
+        guaranteed_function_call = is_guaranteed_function_call?(node, child, next_child)
         do_function_check = !guaranteed_function_call && (dont_emit_function_check || false) == false && !is_assignment && !op && !first_child.nil? && (first_child.type == :lvar || is_send) && !(is_block && block_method == node.children[1])
         if do_function_check then
             current_line = @output.split("\n")[@line]
@@ -325,58 +346,86 @@ class CodeGenerator
             end
             write("(type(")
         end
-        idx = 1
-        node.children.each do |child|
-            next_child = node.children[idx] # 1 based
-            guaranteed_function_call = ((!next_child.nil? && !op && child.is_a?(Symbol)) || ((!is_block.nil? || is_block) && block_method == child)) || false
-            if child.is_a?(Parser::AST::Node) then
-                handle_send_child(node, child, idx, guaranteed_function_call, *extra_data)
-            elsif child == :puts then
-                args = [*node.children]
-                args.shift(2)
-                write("print(")
-                args.each do |a|
-                    walk_ast(a)
-                    if a != args.last then
-                        write(", ")
-                    end
-                end
-                write(")")
-                break
-            elsif child == :new then
-                write(".new(")
-            else
-                next if node.children[1] == :puts
-                is_var = !node.nil? && node.children[1].is_a?(Symbol) && !self.is_op?(node.children[1].to_s)
-                obj_asgn = !first_child.nil? && (first_child.type == :lvar || first_child.type == :send)
-                write_dot = nil
-
-                if is_var && obj_asgn then
-                    write_dot = (do_function_check || (not_function || false) == true || is_assignment) && !guaranteed_function_call || !(next_child.nil? && not_function == false)
-                    write(write_dot ? "." : ":")
-                end
-
-                sym = child.to_s
-                str = self.check_operator(sym)
-                if guaranteed_function_call then
-                    str.gsub!("?", "")
-                    str.gsub!("!", "")
-                end
-                write(str)
-                if (is_var && obj_asgn && !do_function_check && !not_function && !guaranteed_function_call && !is_assignment && !op && !write_dot) then
-                    args = [*node.children]
-                    args.shift(2)
-                    write("(#{args.join(", ")})")
-                end
-                if guaranteed_function_call && !write_dot && (is_block.nil? || !is_block) then
+        is_aliased_method, aliased_methods = *has_aliased_method?(node, guaranteed_function_call, do_function_check)
+        if is_aliased_method then
+            aliased_methods.each do |a|
+                case a
+                when :each, :each_with_index
+                    preceding = first_child
+                    use_pairs = a == :each_with_index || @debug_mode
+                    v, i = *block_args
+                    write("for ")
+                    write(use_pairs ? "#{a == :each_with_index ? i.to_s : "_"}, " : "")
+                    write("#{v.to_s} in ")
+                    write(use_pairs ? "pairs" : "ruby.list")
                     write("(")
-                    self.walk_ast(next_child)
-                    write(")")
-                    break
+                    walk_ast(preceding)
+                    write(") do")
+                    self.block
+                    self.newline
                 end
             end
-            idx += 1
         end
+
+        if !is_aliased_method then
+            idx = 1
+            node.children.each do |child|
+                next_child = node.children[idx] # 1 based
+                last_child = node.children[idx - 2]
+                guaranteed_function_call = (is_guaranteed_function_call?(node, child, next_child) || ((!is_block.nil? || is_block) && block_method == child)) || false
+                if child.is_a?(Parser::AST::Node) then
+                    handle_send_child(node, child, idx, guaranteed_function_call, *extra_data)
+                elsif child == :puts then
+                    args = [*node.children]
+                    args.shift(2)
+                    write("print(")
+                    args.each do |a|
+                        walk_ast(a)
+                        if a != args.last then
+                            write(", ")
+                        end
+                    end
+                    write(")")
+                    break
+                elsif child == :new then
+                    write(".new(")
+                else
+                    next if node.children[1] == :puts
+                    is_var = !node.nil? && node.children[1].is_a?(Symbol) && !self.is_op?(node.children[1].to_s)
+                    obj_asgn = !first_child.nil? && (first_child.type == :lvar || first_child.type == :send)
+                    write_dot = nil
+
+                    sym = child.to_s
+                    str = self.check_operator(sym)
+                    if guaranteed_function_call then
+                        str.gsub!("?", "")
+                        str.gsub!("!", "")
+                    end
+
+                    is_aliased_method, aliased_methods = *has_aliased_method?(child, guaranteed_function_call, do_function_check)
+                    if is_var && obj_asgn && !is_aliased_method then
+                        write_dot = (do_function_check || (not_function || false) == true || is_assignment) || (!guaranteed_function_call && !(next_child.nil? && not_function == false))
+                        write(write_dot ? "." : ":")
+                    end
+                    if !is_aliased_method then
+                        write(str)
+                    end
+                    if (is_var && obj_asgn && !do_function_check && !not_function && !guaranteed_function_call && !is_assignment && !op && !write_dot) then
+                        args = [*node.children]
+                        args.shift(2)
+                        write("(#{args.join(", ")})")
+                    end
+                    if guaranteed_function_call && !write_dot && (is_block.nil? || !is_block) then
+                        write("(")
+                        self.walk_ast(next_child)
+                        write(")")
+                        break
+                    end
+                end
+                idx += 1
+            end
+        end
+
         if do_function_check then
             write(") == \"function\" and ")
             walk_ast(node, true, false)
@@ -386,6 +435,41 @@ class CodeGenerator
         end
         if node.children[1] == :new then
             write(")")
+        end
+    end
+
+    def get_symbols_in(node)
+        if node.nil? then return [] end
+        descendants = []
+        if node.is_a?(Parser::AST::Node) then
+            node.children.each do |child|
+                if child.is_a?(Parser::AST::Node) && child.children.length > 0 then
+                    descendants.push(*get_symbols_in(child))
+                else
+                    descendants.push(child)
+                end
+            end
+        else
+            descendants.push(node)
+        end
+        descendants
+    end
+
+    def has_aliased_method?(node, guaranteed_function_call = false, do_function_check = false)
+        symbols = get_symbols_in(node)
+
+        aliased_methods = []
+        symbols.each do |sym|
+            is_aliased_method = @function_aliases.include?(sym)
+            if is_aliased_method then
+                aliased_methods.push(sym)
+            end
+        end
+
+        if aliased_methods.length > 0 && (guaranteed_function_call || !do_function_check) then
+            return true, aliased_methods.uniq
+        else
+            return false
         end
     end
 
@@ -458,7 +542,11 @@ class CodeGenerator
         base_table = parent.nil? ? "{}" : "#{parent.children[1]}.new(#{args.compact.join(", ")})"
         writeln("local idxMeta = setmetatable(#{class_name}, { __index = #{base_table} })")
 
-        write("for _, mixin in pairs(include) do")
+        write("for ")
+        write(@debug_mode ? "_, " : "")
+        write("mixin in ")
+        write(@debug_mode ? "pairs" : "ruby.list")
+        write("(include) do")
         @block -= 1
         self.newline
         @block += 1

@@ -1,4 +1,17 @@
-#!/usr/bin/env sh
-entry_point="src/RoGems.rb"
-base_dir=$(dirname $0)
-ruby "$base_dir/../$entry_point"
+#!/bin/env bash
+
+# Check if Ruby is installed
+if ! command -v ruby &> /dev/null
+then
+    echo "Error: Ruby is not installed or could not be located. Please install Ruby or add it to your PATH and try again."
+    exit 1
+fi
+
+# Run the RoGems.rb script
+current_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+arg_string=""
+for arg in "$@"
+do
+  arg_string="$arg_string $arg"
+done
+ruby "$current_dir/../src/RoGems.rb" $arg_string
