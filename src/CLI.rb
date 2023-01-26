@@ -2,6 +2,7 @@ require "json"
 require "listen"
 require "optparse"
 require "fileutils"
+require "open3"
 require "Transpiler"
 
 class CLI
@@ -14,29 +15,28 @@ class CLI
 	def initialize
 		@options = {}
 		OptionParser.new do |opts|
+			opts.banner = "Usage: rogems [options]"
 			opts.on("-w", "--watch", "Watch for changes in directory") { |watch| @options[:watch] = watch }
-			opts.on("init [INIT_MODE]", String, "Create a new Rojo project and necessary configuration files. INIT_MODE can be 'none', 'game', or 'gem'") do |init_mode|
-				# Create a new Rojo project
-				validated = validate_init_mode(init_mode == "" || init_mode.nil?  ? "game" : init_mode)
-				init_command = get_init_command(validated)
+			opts.on("--init=INIT_MODE", "Create a new Rojo project and necessary configuration files. INIT_MODE can be 'none', 'game', or 'gem'") do |init_mode|				# Create a new Rojo project
+				@options[:init] = true
+                validated = validate_init_mode(init_mode == "" || init_mode.nil?  ? "game" : init_mode)
+				init_command = get_init_cmd(validated)
 				self.check_rojo_installed
-				system(init_command)
+				success = system(init_command)
+                if !success then return end
+
 				# Rename the created "src" directory to "out"
 				FileUtils.mv("src", "out")
 				# Create a new "src" directory
 				FileUtils.mkdir("src")
 				# Create a new "rogems.json" file
-				File.open("rogems.json", "w") do |f|
-					f.write({
-						"rootDir" => Dir.pwd,
-						"sourceDir" => "src",
-						"outDir" => "out",
-						"debugging" => false
-					}.to_json)
-				end
+                path = File.join(File.dirname(__FILE__), "default_rogems.json")
+                default_rogems_json = File.read(path)
+				File.open("rogems.json", "w") { |f| f.write(default_rogems_json) }
 			end
 		end.parse!
 
+        if @options[:init] then return end
 		config_name = File.join(Dir.pwd, "rogems.json")
 		if !File.exist?(config_name) then
 			raise Exceptions::MissingConfigError.new
@@ -74,19 +74,18 @@ class CLI
 		end
 	end
 
-	def get_init_command(init_mode)
+	def get_init_cmd(init_mode)
 		case init_mode
-		when InitMode::NONE
+		when InitMode::NONE, InitMode::GEM
 		  	"rojo init"
 		when InitMode::GAME
-		  	"rojo init game"
-		when InitMode::GEM
-		  	"rojo init package"
+		  	"rojo init --kind place"
 		end
 	end
 
 	def check_rojo_installed
-		rojo_installed = system("rojo -v")
+		stderr, stdout, status = Open3.capture3("rojo -v")
+		rojo_installed = stderr.nil? || stderr == ""
 		raise Exceptions::RojoNotFoundError.new unless rojo_installed
 	end
 end

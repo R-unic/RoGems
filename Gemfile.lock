@@ -19,6 +19,7 @@ GEM
       rb-inotify (~> 0.9, >= 0.9.10)
     nokogiri (1.14.0-x64-mingw-ucrt)
       racc (~> 1.4)
+    open3 (0.1.2)
     optparse (0.3.1)
     parallel (1.22.1)
     parser (3.2.0.0)
@@ -82,6 +83,7 @@ PLATFORMS
 DEPENDENCIES
   benchmark
   listen
+  open3
   optparse
   parser
   ruby-lsp
