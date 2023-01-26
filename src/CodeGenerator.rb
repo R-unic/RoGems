@@ -21,9 +21,8 @@ class CodeGenerator
         @block = 0
         @line = 0
 
-        @method_aliases = [:each, :each_with_index, :nil?]
+        @method_aliases = [:each, :each_with_index, :nil?, :to_s]
         @dont_return_nodes = [:lvasgn, :cvasgn, :ivasgn, :class, :module, :def, :puts, :if, :while, :until, :for, :break]
-        @node_properties = {}
     end
 
     def generate()
@@ -68,9 +67,6 @@ class CodeGenerator
 
     def walk_ast(node, *extra_data)
         if node.is_a?(Parser::AST::Node) then
-            if @node_properties[node.object_id].nil? then
-                @node_properties[node.object_id] = {:extracted_aliased_method => false}
-            end
             case node.type
             when :true, :false, :nil # literals
                 write(node.type.to_s)
@@ -311,6 +307,8 @@ class CodeGenerator
         when :each, :each_with_index
             walk_ast(block)
             self.end
+		when :to_s
+			write(")")
         when :nil?
             write(" == nil")
         end
@@ -370,6 +368,10 @@ class CodeGenerator
                     write(") do")
                     self.block
                     self.newline
+				when :to_s
+					# walk_ast(preceding)
+					# write("tostring(")
+					# walk_ast(first_child)
                 when :nil?
                     walk_ast(first_child, true)
                 end
@@ -445,8 +447,7 @@ class CodeGenerator
         if node.children[1] == :new then
             write(")")
         end
-        if !is_block && is_aliased_method then
-            puts node, block_method
+        if (!is_block || is_block.nil?) && is_aliased_method then
             aliased_methods.each { |a| handle_aliased_suffix(a, child) }
         end
     end
