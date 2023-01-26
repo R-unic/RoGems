@@ -21,8 +21,9 @@ class CodeGenerator
         @block = 0
         @line = 0
 
-        @function_aliases = [:each, :each_with_index]
+        @method_aliases = [:each, :each_with_index, :nil?]
         @dont_return_nodes = [:lvasgn, :cvasgn, :ivasgn, :class, :module, :def, :puts, :if, :while, :until, :for, :break]
+        @node_properties = {}
     end
 
     def generate()
@@ -67,6 +68,9 @@ class CodeGenerator
 
     def walk_ast(node, *extra_data)
         if node.is_a?(Parser::AST::Node) then
+            if @node_properties[node.object_id].nil? then
+                @node_properties[node.object_id] = {:extracted_aliased_method => false}
+            end
             case node.type
             when :true, :false, :nil # literals
                 write(node.type.to_s)
@@ -237,7 +241,6 @@ class CodeGenerator
                 args = args_node.children.map { |a| a.children[0].is_a?(Parser::AST::Node) ? a.children[0].children[0].to_s : a.children[0].to_s }
                 walk_ast(preceding, nil, nil, true, preceding.children.last, args)
                 if !has_aliased_method then
-
                     write("(function(#{args.join(", ")})")
                     self.block
                     self.newline
@@ -246,13 +249,7 @@ class CodeGenerator
                     write(")")
                 end
                 if has_aliased_method then
-                    aliased_methods.each do |a|
-                        case a
-                        when :each, :each_with_index
-                            walk_ast(block)
-                            self.end
-                        end
-                    end
+                    aliased_methods.each { |a| handle_aliased_suffix(a, block) }
                 end
             when :block_pass # passing fns
                 block = node.children[0]
@@ -309,6 +306,16 @@ class CodeGenerator
         @last_line = @line
     end
 
+    def handle_aliased_suffix(a, block)
+        case a
+        when :each, :each_with_index
+            walk_ast(block)
+            self.end
+        when :nil?
+            write(" == nil")
+        end
+    end
+
     def walk_next_conditions(node)
         nextif_nodes = node.children.filter { |n| n.is_a?(Parser::AST::Node) && n.type == :if && n.children[1].is_a?(Parser::AST::Node) && n.children[1].type == :next }
         node.children.each do |child|
@@ -363,6 +370,8 @@ class CodeGenerator
                     write(") do")
                     self.block
                     self.newline
+                when :nil?
+                    walk_ast(first_child, true)
                 end
             end
         end
@@ -436,6 +445,10 @@ class CodeGenerator
         if node.children[1] == :new then
             write(")")
         end
+        if !is_block && is_aliased_method then
+            puts node, block_method
+            aliased_methods.each { |a| handle_aliased_suffix(a, child) }
+        end
     end
 
     def get_symbols_in(node)
@@ -460,7 +473,7 @@ class CodeGenerator
 
         aliased_methods = []
         symbols.each do |sym|
-            is_aliased_method = @function_aliases.include?(sym)
+            is_aliased_method = @method_aliases.include?(sym)
             if is_aliased_method then
                 aliased_methods.push(sym)
             end
@@ -541,6 +554,7 @@ class CodeGenerator
         writeln("local include = {#{mixins.join(", ")}}")
         base_table = parent.nil? ? "{}" : "#{parent.children[1]}.new(#{args.compact.join(", ")})"
         writeln("local idxMeta = setmetatable(#{class_name}, { __index = #{base_table} })")
+        writeln("idxMeta.__type = \"#{class_name}\"")
 
         write("for ")
         write(@debug_mode ? "_, " : "")
@@ -760,7 +774,7 @@ class CodeGenerator
     end
 
     def is_op?(str)
-        operators = %w(+ - * / += -= *= /= %= **= % ** & | ^ > >= < <= == === != =~ !~ && || =)
+        operators = %w(+ - * / += -= *= /= %= **= % ** & | ^ > >= < <= == === != =~ !~ ! && || =)
         operators.include?(str.strip)
     end
 
@@ -769,7 +783,7 @@ class CodeGenerator
             if str == "=~" || str == "!~" || str == "^" || str == "&" || str == "|" then
                 raise Exceptions::UnsupportedBitOpError.new
             end
-            " #{str.gsub("!=", "~=").gsub("**", "^").gsub("===", "==").gsub("&&", "and").gsub("||", "or")} "
+            " #{str.gsub("!=", "~=").gsub("**", "^").gsub("===", "==").gsub("&&", "and").gsub("||", "or").gsub("!", "not")} "
         else
             str.gsub("=", " = ")
         end
