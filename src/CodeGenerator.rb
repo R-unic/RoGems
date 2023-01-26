@@ -27,7 +27,7 @@ class CodeGenerator
 
     def generate()
         write(@debug_mode ? "-- " : "")
-        write("local ruby = require(game.ReplicatedStorage.RubyLib)")
+        write("local ruby = require(game.ReplicatedStorage.Ruby.Runtime)")
         self.newline
         self.newline
 
