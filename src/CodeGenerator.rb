@@ -10,7 +10,6 @@ Parser::Builders::Default.emit_forward_arg         = true
 Parser::Builders::Default.emit_kwargs              = true
 Parser::Builders::Default.emit_match_pattern       = true
 
-# pattern matching operators, implement object functions (nil?, is_a?, etc), case..when stmt, test more for roblox compatibility and interop with rojo
 class CodeGenerator
     attr_reader :output
 
@@ -447,7 +446,7 @@ class CodeGenerator
         if node.children[1] == :new then
             write(")")
         end
-        if (!is_block || is_block.nil?) && is_aliased_method then
+        if (is_block == false || is_block.nil?) && is_aliased_method && !is_send then
             aliased_methods.each { |a| handle_aliased_suffix(a, child) }
         end
     end

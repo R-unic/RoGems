@@ -7,6 +7,7 @@ GEM
     diff-lcs (1.5.0)
     e2mmap (0.1.0)
     ffi (1.15.5)
+    ffi (1.15.5-x64-mingw-ucrt)
     jaro_winkler (1.5.4)
     json (2.6.3)
     kramdown (2.4.0)
@@ -18,6 +19,8 @@ GEM
       rb-fsevent (~> 0.10, >= 0.10.3)
       rb-inotify (~> 0.9, >= 0.9.10)
     nokogiri (1.14.0-x64-mingw-ucrt)
+      racc (~> 1.4)
+    nokogiri (1.14.0-x86_64-linux)
       racc (~> 1.4)
     open3 (0.1.2)
     optparse (0.3.1)
@@ -79,6 +82,7 @@ GEM
 
 PLATFORMS
   x64-mingw-ucrt
+  x86_64-linux
 
 DEPENDENCIES
   benchmark
