@@ -190,10 +190,11 @@ class CodeGenerator
                 send(node, *extra_data)
             when :index
                 table, idx = *node.children
+                write("ruby.Array.at(")
                 walk_ast(table)
-                write("[")
+                write(", ")
                 walk_ast(idx)
-                write("]")
+                write(")")
             when :module # module defs
                 module_def(node)
             when :class # class defs
