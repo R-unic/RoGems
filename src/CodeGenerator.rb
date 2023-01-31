@@ -1,5 +1,5 @@
 require "Exceptions"
-require "parser/current"
+require "parser/ruby30"
 # opt-in to most recent AST format:
 Parser::Builders::Default.emit_lambda              = true
 Parser::Builders::Default.emit_procarg0            = true
@@ -21,16 +21,30 @@ class CodeGenerator
         @line = 0
 
         @method_aliases = [:each, :each_with_index, :nil?, :to_s]
-        @dont_return_nodes = [:lvasgn, :cvasgn, :ivasgn, :class, :module, :def, :puts, :if, :while, :until, :for, :break]
+        @dont_return_nodes = [:cvasgn, :ivasgn, :puts, :if, :while, :until, :for, :break]
+        @return_later_nodes = [:lvasgn, :class, :module, :def]
+        @literals = [:true, :false, :nil, :float, :int, :str, :sym, :array, :hash]
     end
 
-    def generate()
+    def destroy
+        @source = nil
+        @debug_mode = nil
+        @output = nil
+        @block = nil
+        @line = nil
+        @method_aliases = nil
+        @dont_return_nodes = nil
+        @return_later_nodes = nil
+    end
+
+    def generate
+        @output = ""
         write(@debug_mode ? "-- " : "")
         write("local ruby = require(game.ReplicatedStorage.Ruby.Runtime)")
         self.newline
         self.newline
 
-        root_node = Parser::CurrentRuby.parse(@source)
+        root_node = Parser::Ruby30.parse(@source)
         walk_ast(root_node)
         if @debug_mode then
             puts root_node
@@ -83,16 +97,26 @@ class CodeGenerator
                 write("}")
             when :hash
                 write("{")
+                self.block
+                self.newline
                 node.children.each do |pair|
                     walk_ast(pair)
                     if pair != node.children.last then
+                        write(",")
                         self.newline
                     end
                 end
+                @block -= 1
+                self.newline
                 write("}")
             when :pair
                 key, value = *node.children
-                write(key.children[1].to_s)
+                is_lit = @literals.include?(key.type)
+                write(is_lit ? "[" : key.children[1].to_s)
+                if is_lit then
+                    walk_ast(key)
+                    write("]")
+                end
                 write(" = ")
                 walk_ast(value)
             when :if # control flow
@@ -200,13 +224,19 @@ class CodeGenerator
             when :class # class defs
                 class_def(node)
             when :begin # blocks
+                explicit_no_return = extra_data[0]
                 node.children.each do |child|
                     has_aliased = has_aliased_method?(child)
-                    if child == node.children.last && ((child.type == :send && !is_assignment?(child)) || child.children[1] != :puts) && !@dont_return_nodes.include?(child.type) && !has_aliased then
+                    if !explicit_no_return && child == node.children.last && ((child.type == :send && !is_assignment?(child)) || child.children[1] != :puts) && !@dont_return_nodes.include?(child.type) && !@return_later_nodes.include?(child.type) && !has_aliased then
                         write("return ")
                     end
                     if child.is_a?(Parser::AST::Node) then
                         walk_ast(child, *extra_data)
+                        if child == node.children.last then
+                            if !@return_later_nodes.include?(child.type) then return end
+                            puts child
+                            write("return #{}")
+                        end
                     end
                     if child != node.children.last then
                         self.newline
@@ -297,9 +327,32 @@ class CodeGenerator
                 warn("unhandled ast node: #{node.type}")
             end
         elsif node.is_a?(Symbol) then
-            write(" #{node.to_s} ")
+            sym = check_operator(node.to_s)
+            write(sym)
         end
         @last_line = @line
+    end
+
+    def handle_aliased_prefix(a, preceding, block_args)
+        case a
+        when :each, :each_with_index
+            use_pairs = a == :each_with_index || @debug_mode
+            v, i = *block_args
+            write("for ")
+            write(use_pairs ? "#{a == :each_with_index ? i.to_s : "_"}, " : "")
+            write("#{v.to_s} in ")
+            write(use_pairs ? "pairs" : "ruby.list")
+            write("(")
+            walk_ast(preceding)
+            write(") do")
+            self.block
+            self.newline
+        when :to_s
+            walk_ast(preceding)
+            write("tostring(")
+        when :nil?
+            walk_ast(preceding, true)
+        end
     end
 
     def handle_aliased_suffix(a, block)
@@ -344,6 +397,10 @@ class CodeGenerator
         next_child = node.children.last
         guaranteed_function_call = is_guaranteed_function_call?(node, child, next_child)
         do_function_check = !guaranteed_function_call && (dont_emit_function_check || false) == false && !is_assignment && !op && !first_child.nil? && (first_child.type == :lvar || is_send) && !(is_block && block_method == node.children[1])
+
+        if is_op?(next_child.to_s) && next_child == node.children.last then
+            walk_ast(next_child)
+        end
         if do_function_check then
             current_line = @output.split("\n")[@line]
             if current_line.nil? && is_block.nil? then
@@ -351,39 +408,19 @@ class CodeGenerator
             end
             write("(type(")
         end
+
         is_aliased_method, aliased_methods = *has_aliased_method?(node, guaranteed_function_call, do_function_check)
         if is_aliased_method then
-            aliased_methods.each do |a|
-                case a
-                when :each, :each_with_index
-                    preceding = first_child
-                    use_pairs = a == :each_with_index || @debug_mode
-                    v, i = *block_args
-                    write("for ")
-                    write(use_pairs ? "#{a == :each_with_index ? i.to_s : "_"}, " : "")
-                    write("#{v.to_s} in ")
-                    write(use_pairs ? "pairs" : "ruby.list")
-                    write("(")
-                    walk_ast(preceding)
-                    write(") do")
-                    self.block
-                    self.newline
-				when :to_s
-					# walk_ast(preceding)
-					# write("tostring(")
-					# walk_ast(first_child)
-                when :nil?
-                    walk_ast(first_child, true)
-                end
-            end
+            aliased_methods.each { |a| handle_aliased_prefix(a, first_child, block_args) }
         end
 
-        if !is_aliased_method then
+        if !is_aliased_method || child == :puts then
             idx = 1
             node.children.each do |child|
                 next_child = node.children[idx] # 1 based
                 last_child = node.children[idx - 2]
                 guaranteed_function_call = (is_guaranteed_function_call?(node, child, next_child) || ((!is_block.nil? || is_block) && block_method == child)) || false
+
                 if child.is_a?(Parser::AST::Node) then
                     handle_send_child(node, child, idx, guaranteed_function_call, *extra_data)
                 elsif child == :puts then
@@ -391,7 +428,7 @@ class CodeGenerator
                     args.shift(2)
                     write("print(")
                     args.each do |a|
-                        walk_ast(a)
+                        walk_ast(a, true)
                         if a != args.last then
                             write(", ")
                         end
@@ -407,7 +444,7 @@ class CodeGenerator
                     write_dot = nil
 
                     sym = child.to_s
-                    str = self.check_operator(sym)
+                    str = check_operator(sym)
                     if guaranteed_function_call then
                         str.gsub!("?", "")
                         str.gsub!("!", "")
@@ -489,7 +526,9 @@ class CodeGenerator
 
     def handle_send_child(node, child, idx, guaranteed_function_call, *extra_data)
         next_child = node.children[idx] # idx is 1 based, not 0 based
-        op = self.is_op?(node.children[1].to_s)
+        last_child = node.children[idx - 2]
+        op = is_op?(node.children[1].to_s)
+
         case child.type
         when :str
             walk_ast(child)
@@ -510,7 +549,7 @@ class CodeGenerator
                 write(".")
             end
         when :begin
-            handle_send_child(child, child.children[0], idx, *extra_data)
+            handle_send_child(child, child.children[0], idx, last_child == :puts)
         when :block_pass
 
         else
@@ -585,7 +624,7 @@ class CodeGenerator
         writeln("self.private = {}")
         self.newline
 
-        self.primary_privates(inited_privates)
+        primary_privates(inited_privates)
         if !initializer.nil? then
             initializer_block = initializer.children[2]
             walk_ast(initializer_block, readers, writers, accessors)
@@ -679,7 +718,7 @@ class CodeGenerator
 
         if !block.nil? then
             if block.type != :begin && !added_initializer then
-                self.class_initializer(class_name, block, nil, parent)
+                class_initializer(class_name, block, nil, parent)
                 added_initializer = true
             end
             case block.type
@@ -691,7 +730,7 @@ class CodeGenerator
                     inited_privates = block.children.filter { |stmt| stmt.is_a?(Parser::AST::Node) && stmt.type == :ivasgn }
                     initializer = self.get_class_initer_def(block)
 
-                    self.class_initializer(class_name, block, initializer, parent, readers, writers, accessors, inited_privates)
+                    class_initializer(class_name, block, initializer, parent, readers, writers, accessors, inited_privates)
                     added_initializer = true
                 end
             when :send
@@ -775,16 +814,21 @@ class CodeGenerator
     end
 
     def is_op?(str)
-        operators = %w(+ - * / += -= *= /= %= **= % ** & | ^ > >= < <= == === != =~ !~ ! && || =)
+        operators = %w(+ - * / += -= *= /= %= **= % ** & | ^ > >= < <= == === != =~ !~ && || =)
+        operators.include?(str.strip) || is_unary_op?(str)
+    end
+
+    def is_unary_op?(str)
+        operators = %w(- !)
         operators.include?(str.strip)
     end
 
     def check_operator(str)
-        if self.is_op?(str)
+        if is_op?(str)
             if str == "=~" || str == "!~" || str == "^" || str == "&" || str == "|" then
                 raise Exceptions::UnsupportedBitOpError.new
             end
-            " #{str.gsub("!=", "~=").gsub("**", "^").gsub("===", "==").gsub("&&", "and").gsub("||", "or").gsub("!", "not")} "
+            "#{is_unary_op?(str) ? "" : " "}#{str.gsub("!=", "~=").gsub("**", "^").gsub("===", "==").gsub("&&", "and").gsub("||", "or").gsub("!", "not")} "
         else
             str.gsub("=", " = ")
         end

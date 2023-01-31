@@ -15,16 +15,18 @@ class CLI
 	def initialize
 		@options = {}
 		OptionParser.new do |opts|
-			opts.banner = "Usage: rogems [options]"
+			opts.banner = "Usage: rogems [options] [DIRECTORY?]"
 			opts.on("-w", "--watch", "Watch for changes in directory") { |watch| @options[:watch] = watch }
 			opts.on("--init=INIT_MODE", "Create a new Rojo project and necessary configuration files. INIT_MODE can be \"none\", \"game\", or \"gem\"") do |init_mode|				# Create a new Rojo project
 				@options[:init] = true
-                init_project(init_mode == "" || init_mode.nil?  ? "game" : init_mode)
+                init_project(init_mode)
 			end
 		end.parse!
 
         if @options[:init] then return end
-		config_name = File.join(Dir.pwd, "rogems.json")
+        @options[:dir] = ARGV[0]
+
+		config_name = File.join(@options[:dir] || Dir.pwd, "rogems.json")
 		if !File.exist?(config_name) then
 			raise Exceptions::MissingConfigError.new
 		end
@@ -32,18 +34,19 @@ class CLI
 		file = File.read(config_name)
 
 		@config = JSON.parse(file)
-		@transpiler = Transpiler.new(@config)
+		@transpiler = Transpiler.new(@config, @options[:dir])
 
 		if @options[:watch]
-			puts "== Compiling in watch mode =="
+			puts "=== Compiling in watch mode ==="
 			listener = Listen.to(@config["sourceDir"]) do
 				puts "Detected file change, compiling..."
 				@transpiler.transpile
 			end
 			listener.start
-			sleep
 		end
+
 		@transpiler.transpile
+        if @options[:watch] then sleep end
 	end
 
     def init_project(init_mode = "game")
