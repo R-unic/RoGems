@@ -18,10 +18,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Set parser lib
-      run: export RUBYOPT="-I$(bundle show parser)/lib"
     - name: Install RSpec
       run: gem install rspec
+    - name: Install parser
+      run: gem install parser
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
       with:
