@@ -12,6 +12,14 @@ def open_example(example_name, file_name, folder = "src")
     File.read(File.join(File.dirname(__FILE__), "../examples/#{example_name}/#{folder}/client/#{file_name}.#{folder == "src" ? "rb" : "lua"}"))
 end
 
+def compile_example(example_name, file_name)
+    source = open_example(example_name, file_name, "src")
+    expected_output = open_example(example_name, file_name, "out")
+    codegen = RoGems::CodeGenerator.new(CONFIG, source)
+    expect(codegen.generate).to eq(expected_output)
+    codegen.destroy
+end
+
 RSpec.describe RoGems::CodeGenerator, "#generate" do
     context "transpiles examples" do
         it "hello world" do
@@ -23,11 +31,11 @@ RSpec.describe RoGems::CodeGenerator, "#generate" do
         end
 
         it "lava bricks" do
-            source = open_example("lava_brick", "test", "src")
-            expected_output = open_example("lava_brick", "test", "out")
-            codegen = RoGems::CodeGenerator.new(CONFIG, source)
-            expect(codegen.generate).to eq(expected_output)
-            codegen.destroy
+            compile_example("lava_brick", "test")
+        end
+
+        it "classes & inheritance" do
+            compile_example("classes", "main.client")
         end
     end
 

@@ -732,7 +732,6 @@ module RoGems
                         inited_privates = block.children.filter { |stmt| stmt.is_a?(Parser::AST::Node) && stmt.type == :ivasgn }
                         initializer = get_class_initer_def(block)
 
-                        puts initializer
                         class_initializer(class_name, block, initializer, parent, readers, writers, accessors, inited_privates)
                         added_initializer = true
                     end

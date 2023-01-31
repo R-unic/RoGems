@@ -1,4 +1,4 @@
--- local ruby = require(game.ReplicatedStorage.Ruby.Runtime)
+local ruby = require(game.ReplicatedStorage.Ruby.Runtime)
 
 --classdef
 local Entity = {} do
@@ -6,7 +6,7 @@ local Entity = {} do
         local include = {}
         local idxMeta = setmetatable(Entity, { __index = {} })
         idxMeta.__type = "Entity"
-        for _, mixin in pairs(include) do
+        for mixin in ruby.list(include) do
             for k, v in pairs(mixin) do
                 idxMeta[k] = v
             end
@@ -48,7 +48,7 @@ local Player = {} do
         local include = {}
         local idxMeta = setmetatable(Player, { __index = Entity.new() })
         idxMeta.__type = "Player"
-        for _, mixin in pairs(include) do
+        for mixin in ruby.list(include) do
             for k, v in pairs(mixin) do
                 idxMeta[k] = v
             end
