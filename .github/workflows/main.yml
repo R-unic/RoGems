@@ -19,9 +19,9 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Install RSpec
-      run: gem install rspec
+      run: sudo gem install rspec
     - name: Install parser
-      run: gem install parser
+      run: sudo gem install parser
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
       with:
