@@ -1,3 +1,4 @@
+![Build](https://github.com/R-unic/RoGems/actions/workflows/main.yml/badge.svg)
 # RoGems
 RoGems is a Ruby to Lua transpiler written for use with Roblox (like roblox-ts)
 
