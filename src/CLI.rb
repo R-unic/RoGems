@@ -12,28 +12,35 @@ class CLI
 		GEM = 2
 	end
 
+    def get_config(base_dir = Dir.pwd)
+        config_name = File.join(base_dir, "rogems.json")
+		if !File.exist?(config_name) then
+			raise Exceptions::MissingConfigError.new(base_dir)
+		end
+
+		file = File.read(config_name)
+        JSON.parse(file)
+    end
+
 	def initialize
+        @usage = "Usage: rogems [options] [DIRECTORY?]"
 		@options = {}
 		OptionParser.new do |opts|
-			opts.banner = "Usage: rogems [options] [DIRECTORY?]"
-			opts.on("-w", "--watch", "Watch for changes in directory") { |watch| @options[:watch] = watch }
+			opts.banner = @usage
+            opts.on("-t", "--test", "Run RSpec for RoGems.") do
+                @options[:testing] = true
+                system("rspec --format doc")
+            end
+			opts.on("-w", "--watch", "Watch for changes in directory.") { |watch| @options[:watch] = watch }
 			opts.on("--init=INIT_MODE", "Create a new Rojo project and necessary configuration files. INIT_MODE can be \"none\", \"game\", or \"gem\"") do |init_mode|				# Create a new Rojo project
 				@options[:init] = true
                 init_project(init_mode)
 			end
 		end.parse!
 
-        if @options[:init] then return end
+        if @options[:init] || @options[:testing] then return end
         @options[:dir] = ARGV[0]
-
-		config_name = File.join(@options[:dir] || Dir.pwd, "rogems.json")
-		if !File.exist?(config_name) then
-			raise Exceptions::MissingConfigError.new
-		end
-
-		file = File.read(config_name)
-
-		@config = JSON.parse(file)
+		@config = get_config(@options[:dir])
 		@transpiler = Transpiler.new(@config, @options[:dir])
 
 		if @options[:watch]
@@ -63,11 +70,6 @@ class CLI
         default_rogems_json = File.read(path)
         File.open("rogems.json", "w") { |f| f.write(default_rogems_json) }
 
-        config_name = File.join(Dir.pwd, "rogems.json")
-		if !File.exist?(config_name) then
-			raise Exceptions::MissingConfigError.new
-		end
-
 		@config = JSON.parse(default_rogems_json)
 		@transpiler = Transpiler.new(@config)
         FileUtils.touch("./src/shared/helloWorld.rb") # create example files
@@ -82,17 +84,15 @@ class CLI
     end
 
 	def validate_init_mode(mode = "game")
-		valids = ["none", "game", "gem"]
-		if !valids.include?(mode)
-			raise Exceptions::InvalidInitModeError.new(mode, valids)
-		end
-		case mode
+		case mode.downcase
 		when "none"
 			InitMode::NONE
 		when "game"
 			InitMode::GAME
 		when "gem"
 			InitMode::GEM
+        else
+            raise Exceptions::InvalidInitModeError.new(mode, @usage)
 		end
 	end
 

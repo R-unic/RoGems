@@ -21,8 +21,8 @@ module Exceptions
         end
     end
     class MissingConfigError < InitError
-        def initialize
-            super("Missing 'rogems.json' config file in directory")
+        def initialize(dir)
+            super("Missing 'rogems.json' config file in '#{dir}'")
         end
     end
     class RojoNotFoundError < InitError
@@ -31,8 +31,9 @@ module Exceptions
         end
     end
     class InvalidInitModeError  < InitError
-        def initialize(mode, valids)
-            super("Invalid init mode '#{mode}' provided. Valid modes include: #{valids.join(", ")}")
+        def initialize(mode, usage)
+            super("Invalid init mode '#{mode}' provided.")
+            puts usage
         end
     end
     class UnsupportedBitOpError < TranspileError
