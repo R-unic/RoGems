@@ -18,12 +18,14 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Set parser lib
+      run: export RUBYOPT="-I$(bundle show parser)/lib"
+    - name: Install RSpec
+      run: gem install rspec
     - name: Set up Ruby
       uses: ruby/setup-ruby@v1
       with:
         ruby-version: ${{ matrix.ruby }}
         bundler-cache: true
-    - name: Install RSpec
-      run: gem install rspec
     - name: Run tests
       run: rspec
