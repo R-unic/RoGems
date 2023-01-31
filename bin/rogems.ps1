@@ -8,4 +8,4 @@ if (!(Get-Command ruby -ErrorAction SilentlyContinue)) {
 $current_dir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
 # Run the RoGems.rb script
-& ruby "$current_dir/../src/RoGems.rb" $args
+& ruby "$current_dir/../lib/RoGems.rb" $args
