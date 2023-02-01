@@ -5,7 +5,8 @@ CONFIG = {
     "rootDir" => "./",
     "sourceDir" => "src",
     "outDir" => "out",
-    "debugging" => false
+    "debugging" => false,
+    "useTS" => false
 }
 
 def open_example(example_name, file_name, folder = "src")

@@ -1,8 +1,8 @@
 require "json"
 require "listen"
 require "optparse"
-require "fileutils"
 require "open3"
+require "benchmark"
 require "Transpiler"
 
 module RoGems
@@ -13,7 +13,7 @@ module RoGems
             GEM = 2
         end
 
-        def get_config(base_dir)
+        def get_config(base_dir = nil)
             config_name = File.join(base_dir || Dir.pwd, "rogems.json")
             if !File.exist?(config_name) then
                 raise Exceptions::MissingConfigError.new(base_dir)
@@ -48,40 +48,73 @@ module RoGems
                 puts "=== Compiling in watch mode ==="
                 listener = Listen.to(@config["sourceDir"]) do
                     puts "Detected file change, compiling..."
-                    @transpiler.transpile
+                    self.run
                 end
                 listener.start
             end
 
-            @transpiler.transpile
+            self.run
             if @options[:watch] then sleep end
         end
 
+        def run
+            elapsed = Benchmark.realtime do
+                system("rbxtsc --includePath ts_include")
+                @transpiler.transpile
+            end
+            Dir.glob("./out/**/*.rb").filter { |f| File.file?(f) }.each { |f| File.delete(f) }
+            puts "Compiled files successfully. (#{(elapsed).floor}s)"
+        end
+
+        def path_from_lib(path)
+            File.join(File.dirname(__FILE__), path)
+        end
+
         def init_project(init_mode = "game")
+            check_installed("rojo")
+            check_installed("npm")
+            unless is_installed?("rbxtsc")
+                success = system("npm i --quiet -g roblox-ts")
+                raise Exceptions::FailToInstallRobloxTS.new unless success
+            end
+
             validated = validate_init_mode(init_mode)
             init_command = get_init_cmd(validated)
-            self.check_rojo_installed
             success = system(init_command)
-            if !success then return end
+            return unless success
+
+            default_rojo = File.read(path_from_lib("default_rojo.json")).gsub!("PROJECT_NAME", File.dirname("./"))
+            File.open("default.project.json", "w") { |f| f.write(default_rojo) }
+
+            FileUtils.touch("tsconfig.json")
+            default_tsconfig = File.read(path_from_lib("default_tsconfig.json"))
+            File.open("tsconfig.json", "w") { |f| f.write(default_tsconfig) }
+
+            default_rogems_json = File.read(path_from_lib("default_rogems.json"))
+            File.open("rogems.json", "w") { |f| f.write(default_rogems_json) }
+
+            ran_npm = system("npm i --quiet @rbxts/compiler-types @rbxts/types @rbxts/roact @rbxts/services typescript")
+            return unless ran_npm
 
             FileUtils.mv("src", "out") # rename
-            Dir.glob("./out/**/*").filter { |f| File.file?(f) }.each { |f| File.delete(f) }
-            FileUtils.cp_r("out/.", "src", :remove_destination => true) # copy dirs
-            path = File.join(File.dirname(__FILE__), "default_rogems.json")
-            default_rogems_json = File.read(path)
-            File.open("rogems.json", "w") { |f| f.write(default_rogems_json) }
+            Dir.glob("./out/**/*").filter { |f| File.file?(f) }.each { |f| File.delete(f) } # get rid of all the default crap
+            FileUtils.cp_r("out/.", "src", :remove_destination => true) # copy directories over
+
+            FileUtils.mkdir("ts_include")
+            FileUtils.mkdir("rb_include")
+            FileUtils.cp_r(path_from_lib("rb_include"), "rb_include", :remove_destination => false)
 
             @config = JSON.parse(default_rogems_json)
             @transpiler = Transpiler.new(@config)
             FileUtils.touch("./src/shared/helloWorld.rb") # create example files
-            File.open("./src/shared/helloWorld.rb", "w") do |file|
-                file.write("def helloWorld\n    puts \"hello world\"\nend")
+            File.open("./src/shared/helloWorld.rb", "w") do |f|
+                f.write("def helloWorld\n    puts \"hello world\"\nend")
             end
             FileUtils.touch("./src/client/main.client.rb")
-            File.open("./src/client/main.client.rb", "w") do |file|
-                file.write("require \"shared/helloWorld\"\n\nhelloWorld()")
+            File.open("./src/client/main.client.rb", "w") do |f|
+                f.write("require \"shared/helloWorld\"\n\nhelloWorld()")
             end
-            @transpiler.transpile
+            self.run
         end
 
         def validate_init_mode(mode = "game")
@@ -100,22 +133,26 @@ module RoGems
         def get_init_cmd(init_mode)
             case init_mode
             when InitMode::NONE, InitMode::GEM
-                  "rojo init"
+                "rojo init"
             when InitMode::GAME
-                  "rojo init --kind place"
+                "rojo init --kind place"
             end
         end
 
-        def check_rojo_installed
-            rojo_installed = false
+        def is_installed?(cmd)
+            installed = false
             begin
-                stderr, stdout, status = Open3.capture3("rojo -v")
-                rojo_installed = stderr.nil? || stderr == ""
+                stderr, stdout, status = Open3.capture3("#{cmd} -v")
+                installed = stderr.nil? || stderr == "" || status.success?
             rescue Exception => e
-                rojo_installed = false
-            ensure
-                raise Exceptions::RojoNotFoundError.new unless rojo_installed
+                installed = false
             end
+            installed
+        end
+
+        def check_installed(cmd)
+            installed = is_installed?(cmd)
+            raise Exceptions::NotFoundError.new(cmd) unless installed
         end
     end
 end

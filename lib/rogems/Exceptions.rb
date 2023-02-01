@@ -11,6 +11,7 @@ module RoGems
                 self.set_backtrace([])
             end
         end
+
         class NoInputDirError < InitError
             def initialize(searched)
                 super("No input directory '#{searched}' found.")
@@ -26,17 +27,23 @@ module RoGems
                 super("Missing 'rogems.json' config file in '#{dir}'")
             end
         end
-        class RojoNotFoundError < InitError
-            def initialize
-                super("Rojo could not be found. Please make sure it is installed and discoverable (i.e. you can run 'rojo -v').")
-            end
-        end
         class InvalidInitModeError  < InitError
             def initialize(mode, usage)
                 super("Invalid init mode '#{mode}' provided.")
                 puts usage
             end
         end
+        class NotFoundError < InitError
+            def initialize(cmd)
+                super("#{cmd.capitalize} could not be found. Please make sure it is installed and discoverable (i.e. you can run '#{cmd.downcase} -v').")
+            end
+        end
+        class FailToInstallRobloxTS < InitError
+            def initialize(cmd)
+                super("Failed to install roblox-ts.")
+            end
+        end
+
         class UnsupportedBitOpError < TranspileError
             def initialize(op)
                 super("Bitwise operators are not supported.")
