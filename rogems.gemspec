@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative "lib/rogems/Version"
-
 Gem::Specification.new do |spec|
   spec.name = "rogems"
   spec.version = "1.0.4"
