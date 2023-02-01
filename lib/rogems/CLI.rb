@@ -57,7 +57,7 @@ module RoGems
                 FileUtils.cp_r(path_from_lib("rb_include"), "rb_include", :remove_destination => false)
 
                 @config = JSON.parse(default_rogems_json)
-                @transpiler = Transpiler.new(@config)
+                @parent.transpiler = Transpiler.new(@config)
                 FileUtils.touch("./src/shared/helloWorld.rb") # create example files
                 File.open("./src/shared/helloWorld.rb", "w") do |f|
                     f.write("def helloWorld\n    puts \"hello world\"\nend")
@@ -66,7 +66,7 @@ module RoGems
                 File.open("./src/client/main.client.rb", "w") do |f|
                     f.write("require \"shared/helloWorld\"\n\nhelloWorld()")
                 end
-                self.run_transpiler
+                @parent.run_transpiler
             end
 
             def path_from_lib(path)
@@ -120,6 +120,7 @@ module RoGems
 
         class MainCommand
             attr_reader :options
+            attr_accessor :transpiler
 
             def parse_options
                 OptionParser.new do |opts|
@@ -151,7 +152,7 @@ module RoGems
                     @options[:init] = true
                     args = ARGV
                     args.shift
-                    CLI::InitCommand.new(args)
+                    CLI::InitCommand.new(self)
                 else
                     @options[:dir] = @options[:sub_command]
                 end
