@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    rogems (1.0.3)
+    rogems (1.0.5)
 
 GEM
   remote: https://rubygems.org/
