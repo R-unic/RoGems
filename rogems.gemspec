@@ -4,7 +4,7 @@ require_relative "lib/rogems/Version"
 
 Gem::Specification.new do |spec|
   spec.name = "rogems"
-  spec.version = RoGems::VERSION
+  spec.version = "1.0.4"
   spec.authors = ["r-unic"]
   spec.email = ["roleyspersonal@gmail.com"]
 
