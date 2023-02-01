@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |spec|
   spec.name = "rogems"
-  spec.version = "1.0.4"
+  spec.version = "1.0.5"
   spec.authors = ["r-unic"]
   spec.email = ["roleyspersonal@gmail.com"]
 
