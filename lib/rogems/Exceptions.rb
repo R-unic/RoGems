@@ -12,6 +12,11 @@ module RoGems
             end
         end
 
+        class MissingGlobalConfig < InitError
+            def initialize
+                super("No rogems.config.yml found in RoGems installation directory.")
+            end
+        end
         class NoInputDirError < InitError
             def initialize(searched)
                 super("No input directory '#{searched}' found.")
