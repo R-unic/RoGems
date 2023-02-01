@@ -7,6 +7,8 @@
 /spec/reports/
 /tmp/
 
+./compiler_types
+
 # rspec failure tracking
 .rspec_status
 
