@@ -69,4 +69,14 @@ RSpec.describe RoGems::CodeGenerator, "#generate" do
             hash_codegen.destroy
         end
     end
+
+    context "transpiles method aliases" do
+        it "'nil?' -> '== nil'" do
+            source = "'hello'.nil?"
+            expected_output = "\"hello\" == nil"
+            codegen = RoGems::CodeGenerator.new(CONFIG, source)
+            expect(codegen.generate).to eq(RUNTIME_IMPORT + expected_output)
+            codegen.destroy
+        end
+    end
 end
