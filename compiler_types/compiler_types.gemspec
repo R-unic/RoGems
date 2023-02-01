@@ -4,7 +4,7 @@ require_relative "lib/compiler_types/version"
 
 Gem::Specification.new do |spec|
   spec.name = "compiler_types"
-  spec.version = CompilerTypes::VERSION
+  spec.version = VERSION
   spec.authors = ["r-unic"]
   spec.email = ["roleyspersonal@gmail.com"]
 
