@@ -1,3 +1,8 @@
+PATH
+  remote: .
+  specs:
+    rogems (1.0.3)
+
 GEM
   remote: https://rubygems.org/
   specs:
@@ -103,6 +108,7 @@ DEPENDENCIES
   open3
   optparse
   parser
+  rogems!
   rspec
   ruby-lsp
   solargraph

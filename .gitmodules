@@ -1,0 +1,3 @@
+[submodule "lib/rogems/compiler_types"]
+	path = lib/rogems/compiler_types
+	url = https://github.com/R-unic/RoGemsCompilerTypes
