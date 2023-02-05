@@ -1,6 +1,9 @@
 <a href="https://github.com/R-unic/RoGems/tree/master/spec">
   <img src="https://github.com/R-unic/RoGems/actions/workflows/main.yml/badge.svg" alt="build_ci">
 </a>
+<a href="https://badge.fury.io/rb/rogems">
+  <img src="https://badge.fury.io/rb/rogems.svg" alt="Gem Version" height="18">
+</a>
 
 # RoGems
 RoGems is a Ruby to Lua transpiler written for use with Roblox (like roblox-ts)
