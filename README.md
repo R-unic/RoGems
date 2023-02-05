@@ -2,7 +2,7 @@
   <img src="https://github.com/R-unic/RoGems/actions/workflows/main.yml/badge.svg" alt="build_ci">
 </a>
 <a href="https://badge.fury.io/rb/rogems">
-  <img src="https://badge.fury.io/rb/rogems.svg" alt="Gem Version" height="18">
+  <img src="https://badge.fury.io/rb/rogems.svg" alt="Gem Version">
 </a>
 
 # RoGems
