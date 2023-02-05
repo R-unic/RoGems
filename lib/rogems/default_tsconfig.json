@@ -1,10 +1,11 @@
 {
+  "include": ["**/*.tsx"],
 	"compilerOptions": {
 		"allowSyntheticDefaultImports": true,
 		"downlevelIteration": true,
 		"jsx": "react",
 		"jsxFactory": "Roact.createElement",
-		"jsxFragmentFactory": "Roact.Fragment",
+		"jsxFragmentFactory": "Roact.createFragment",
 		"module": "commonjs",
 		"moduleResolution": "Node",
 		"noLib": true,

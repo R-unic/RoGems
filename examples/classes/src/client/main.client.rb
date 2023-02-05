@@ -1,25 +1,31 @@
-class Entity
-    attr_accessor :position, :health
-    @position = 0
-    @health = 100
+# Example 1: Simple class with a method
+class Dog
+  def bark
+    puts "Woof!"
+  end
 end
 
-class Player < Entity
-    attr_accessor :name
-    attr_reader :id, :character
+# Example 2: Class with a constructor
+class Car
+  def initialize(make, model)
+    @make = make
+    @model = model
+  end
 
-    def initialize(name)
-        @name = name
-        @id = 1
-        @character = Character.new
-    end
-
-    def kill
-        @health = 0
-        @character.destroy
-    end
+  def display
+    puts "The car is a #{@make} #{@model}"
+  end
 end
 
-plr = Player.new("John")
-plr.kill
-puts plr.health
+# Example 3: Class with class level variable
+class Counter
+  @@count = 0
+
+  def initialize
+    @@count += 1
+  end
+
+  def self.get_count
+    @@count
+  end
+end

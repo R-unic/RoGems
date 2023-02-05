@@ -150,8 +150,6 @@ module RoGems
                 case @options[:sub_command]
                 when "init"
                     @options[:init] = true
-                    args = ARGV
-                    args.shift
                     CLI::InitCommand.new(self)
                 else
                     @options[:dir] = @options[:sub_command]
@@ -188,14 +186,15 @@ module RoGems
 
             def run_transpiler
                 elapsed = Benchmark.realtime do
-                    system("rbxtsc --includePath ts_include") unless @options[:no_ts] || ROGEMS_CONFIG["UseTypeScript"] == false
+                    project_dir = @options[:sub_command]
+                    system("rbxtsc --project #{project_dir} --includePath #{File.join(project_dir, "ts_include")}") unless @options[:no_ts] || ROGEMS_CONFIG["UseTypeScript"] == false
                     @transpiler.transpile
                 end
                 if @options[:verbose] then
                     puts "Deleting excess files from rbxtsc"
                 end
                 Dir.glob("./out/**/*.rb").filter { |f| File.file?(f) }.each { |f| File.delete(f) }
-                puts "Compiled files successfully. (#{(elapsed).floor}s)"
+                puts "Compiled files successfully. (#{(elapsed < 1 ? elapsed * 1000 : elapsed).floor}#{elapsed < 1 ? "ms" : "s"})"
             end
         end
     end

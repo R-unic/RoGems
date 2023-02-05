@@ -27,7 +27,7 @@ module RoGems
             @literals = [:true, :false, :nil, :float, :int, :str, :sym, :array, :hash]
         end
 
-        def destroy
+        def destroy # for testing purposes
             @source = nil
             @debug_mode = nil
             @output = nil
@@ -47,9 +47,7 @@ module RoGems
 
             root_node = Parser::Ruby30.parse(@source)
             walk_ast(root_node)
-            if @debug_mode then
-                puts root_node
-            end
+            puts root_node unless @debug_mode == false
             @output
         end
 
@@ -85,9 +83,9 @@ module RoGems
                 when :true, :false, :nil # literals
                     write(node.type.to_s)
                 when :float, :int
-                    write(node.children[0].to_s)
+                    write(node.children.first.to_s)
                 when :str, :sym
-                    content = node.children[0].to_s
+                    content = node.children.first.to_s
                     write(self.quote_surround(content))
                 when :array
                     write("{")
@@ -121,7 +119,7 @@ module RoGems
                     write(" = ")
                     walk_ast(value)
                 when :if # control flow
-                    add_end = extra_data[0]
+                    add_end = extra_data.first
                     condition, block, elseif = *node.children
                     is_nextif = !block.nil? && block.type == :next
                     if is_nextif then
@@ -179,7 +177,7 @@ module RoGems
                     walk_ast(max)
                 when :for
                     symbol, iterable, block = *node.children
-                    var_name = symbol.type == :mlhs ? symbol.children.map { |s| s.children[0].to_s }.join(", ") : symbol.children[0].to_s
+                    var_name = symbol.type == :mlhs ? symbol.children.map { |s| s.children.first.to_s }.join(", ") : symbol.children.first.to_s
 
                     write("for #{iterable.type == :irange ? var_name : "_, " + var_name}")
                     if iterable.type == :irange then
@@ -225,7 +223,7 @@ module RoGems
                 when :class # class defs
                     class_def(node)
                 when :begin # blocks
-                    explicit_no_return = extra_data[0]
+                    explicit_no_return = extra_data.first
                     node.children.each do |child|
                         has_aliased = has_aliased_method?(child)
                         if !explicit_no_return && child == node.children.last && ((child.type == :send && !is_assignment?(child)) || child.children[1] != :puts) && !@dont_return_nodes.include?(child.type) && !@return_later_nodes.include?(child.type) && !has_aliased then
@@ -235,8 +233,15 @@ module RoGems
                             walk_ast(child, *extra_data)
                             if child == node.children.last then
                                 unless @return_later_nodes.include?(child.type) then return end
-                                puts child
-                                write("return #{}")
+                                symbol = nil
+                                case child.type
+                                when :class
+                                  symbol = child.children.first.children[1]
+                                else
+                                  symbol = child.children.first
+                                end
+                                self.newline
+                                write("return #{symbol.to_s}")
                             end
                         end
                         unless child == node.children.last then
@@ -244,10 +249,10 @@ module RoGems
                         end
                     end
                 when :def # defs
-                    set_args = extra_data[0]
-                    def_name = node.children[0].to_s.gsub("?", "").gsub("!", "")
+                    set_args = extra_data.first
+                    def_name = node.children.first.to_s.gsub("?", "").gsub("!", "")
                     args = (set_args || node.children[1]).children
-                    arg_list = args.map { |arg| arg.children[0] }.join(", ")
+                    arg_list = args.map { |arg| arg.children.first }.join(", ")
                     block = node.children[2]
                     class_name = extra_data[4]
                     if def_name == :initialize then return end
@@ -265,7 +270,7 @@ module RoGems
                 when :block # lambdas
                     preceding, args_node, block = *node.children
                     has_aliased_method, aliased_methods = *has_aliased_method?(preceding)
-                    args = args_node.children.map { |a| a.children[0].is_a?(Parser::AST::Node) ? a.children[0].children[0].to_s : a.children[0].to_s }
+                    args = args_node.children.map { |a| a.children.first.is_a?(Parser::AST::Node) ? a.children.first.children.first.to_s : a.children.first.to_s }
                     walk_ast(preceding, nil, nil, true, preceding.children.last, args)
                     if has_aliased_method then
                         aliased_methods.each { |a| handle_aliased_suffix(a, block) }
@@ -278,7 +283,7 @@ module RoGems
                         write(")")
                     end
                 when :block_pass # passing fns
-                    block = node.children[0]
+                    block = node.children.first
                     walk_ast(block)
                 when :masgn # multiple assignment
                     self.multiple_assign(node)
@@ -296,7 +301,7 @@ module RoGems
                     if val.is_a?(Parser::AST::Node)
                         walk_ast(val, *extra_data)
                     else
-                        write(val.children[0].to_s)
+                        write(val.children.first.to_s)
                     end
                 when :lvasgn, :gvasgn # local var assignment
                     name, val = *node.children
@@ -304,17 +309,17 @@ module RoGems
                     if val.is_a?(Parser::AST::Node) then
                         walk_ast(val, *extra_data)
                     else
-                        write(val.children[0].to_s)
+                        write(val.children.first.to_s)
                     end
                 when :cvasgn
-                    class_name = extra_data[0]
+                    class_name = extra_data.first
                     self.instancevar_assign(node, "#{class_name}.")
                 when :ivasgn
-                    var_name = node.children[0].to_s.gsub("@", "")
-                    readers, writers, accessors = *extra_data
-                    readers.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
-                    writers.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
-                    accessors.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
+                    var_name = node.children.first.to_s.gsub("@", "")
+                    class_name, readers, writers, accessors = *extra_data
+                    readers.map! { |n| (n.is_a?(String) ? n : n.children[2].children.first).to_s }
+                    writers.map! { |n| (n.is_a?(String) ? n : n.children[2].children.first).to_s }
+                    accessors.map! { |n| (n.is_a?(String) ? n : n.children[2].children.first).to_s }
                     location = self.get_v_location_name(var_name, readers, writers, accessors)
                     self.instancevar_assign(node, location)
                 when :lvar # variable indexing
@@ -388,8 +393,8 @@ module RoGems
             dont_emit_function_check, not_function, is_block, block_method, block_args = *extra_data
             is_assignment = is_assignment?(node)
             op = is_op?(node.children[1].to_s)
-            first_child = node.children[0]
-            is_send = !first_child.nil? && first_child.is_a?(Parser::AST::Node) && first_child.children.length > 0 && !first_child.children[0].nil? && first_child.children[0].is_a?(Parser::AST::Node) && (first_child.children[0].type == :send || first_child.children[0].type == :lvar)
+            first_child = node.children.first
+            is_send = !first_child.nil? && first_child.is_a?(Parser::AST::Node) && first_child.children.length > 0 && !first_child.children.first.nil? && first_child.children.first.is_a?(Parser::AST::Node) && (first_child.children.first.type == :send || first_child.children.first.type == :lvar)
             child = node.children[node.children.length - 2]
             next_child = node.children.last
             guaranteed_function_call = is_guaranteed_function_call?(node, child, next_child)
@@ -532,12 +537,15 @@ module RoGems
                 write(node.children.last != child ? ", " : "")
             when :int, :float, :true, :false, :send, :lvar
                 walk_ast(child, *extra_data)
+            when :cvar
             when :ivar
-                var_name = child.children[0].to_s.gsub("@", "")
-                readers, writers, accessors = *extra_data
-                readers.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
-                writers.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
-                accessors.map! { |n| (n.is_a?(String) ? n : n.children[2].children[0]).to_s }
+                var_name = child.children.first.to_s.gsub("@", "")
+                class_name, readers, writers, accessors, statics = *extra_data
+                readers.map! { |n| (n.is_a?(String) ? n : n.children[2].children.first).to_s }
+                writers.map! { |n| (n.is_a?(String) ? n : n.children[2].children.first).to_s }
+                accessors.map! { |n| (n.is_a?(String) ? n : n.children[2].children.first).to_s }
+                puts statics
+                statics.map! { |n| (n.is_a?(String) ? n : n.children[2].children.first).to_s }
                 location = self.get_v_location_name(var_name, readers, writers, accessors) || "private."
                 write(location + var_name)
             when :const
@@ -546,12 +554,12 @@ module RoGems
                     write(".")
                 end
             when :begin
-                handle_send_child(child, child.children[0], idx, last_child == :puts)
+                handle_send_child(child, child.children.first, idx, last_child == :puts)
             when :block_pass
 
             else
                 walk_ast(child, *extra_data)
-                # var_name = child.children[0].to_s.strip
+                # var_name = child.children.first.to_s.strip
                 # write(var_name)
             end
         end
@@ -561,7 +569,7 @@ module RoGems
         end
 
         def primary_privates(inited_privates)
-            inited_privates.each do |var|
+            (inited_privates || []).each do |var|
                 instancevar_assign(var)
                 unless var == inited_privates.last then
                     self.newline
@@ -569,7 +577,7 @@ module RoGems
             end
         end
 
-        def class_initializer(class_name, class_block, initializer = nil, parent = nil, readers = nil, writers = nil, accessors = nil, inited_privates = nil)
+        def class_initializer(class_name, class_block, initializer = nil, parent = nil, readers = nil, writers = nil, accessors = nil, statics = nil, inited_privates = nil)
             if initializer.nil? then
                 writeln(")")
             end
@@ -580,7 +588,7 @@ module RoGems
                     res = []
                     if child.is_a?(Parser::AST::Node) && child.type == :super
                         vals = child.children.map do |a|
-                            sym = a.type == :str ? self.quote_surround(a.children[0]) : a.children[0]
+                            sym = a.type == :str ? self.quote_surround(a.children.first) : a.children.first
                         end
                         vals.each { |c| res.push(c) }
                         res
@@ -629,7 +637,7 @@ module RoGems
             primary_privates(inited_privates)
             unless initializer.nil? then
                 initializer_block = initializer.children[2]
-                walk_ast(initializer_block, readers, writers, accessors)
+                walk_ast(initializer_block, class_name, readers, writers, accessors, statics)
             end
 
             self.newline
@@ -685,17 +693,17 @@ module RoGems
         end
 
         def get_class_initer_def(block)
-            initializer = block.children.filter { |def_node| def_node.type == :def && def_node.children[0] == :initialize }[0]
-            if initializer && initializer.children[0] == :initialize then
+            initializer = block.children.filter { |def_node| def_node.type == :def && def_node.children.first == :initialize }.first
+            if initializer && initializer.children.first == :initialize then
                 initializer_args = initializer.children[1]
-                arg_list = initializer_args.children.map { |arg| arg.children[0] }.join(", ")
+                arg_list = initializer_args.children.map { |arg| arg.children.first }.join(", ")
                 write("#{arg_list})")
             end
             initializer
         end
 
         def class_def(node)
-            class_name = node.children[0].children[1].to_s
+            class_name = node.children.first.children[1].to_s
             parent = node.children[1]
             block = node.children[2]
 
@@ -708,7 +716,7 @@ module RoGems
             @block -= 2
             self.block
 
-            stmts = block.children.filter { |stmt| stmt.type == :cvasgn }
+            stmts = block.children.filter { |stmt| stmt.is_a?(Parser::AST::Node) && stmt.type == :cvasgn }
             stmts.each do |stmt|
                 walk_ast(stmt, class_name)
                 self.newline
@@ -726,13 +734,14 @@ module RoGems
                 case block.type
                 when :begin
                     unless added_initializer then
-                        readers = block.children.filter { |stmt| stmt.is_a?(Parser::AST::Node) && stmt.children[1] == :attr_reader }.map { |stmt| stmt.children[2].children[0].to_s }
-                        writers = block.children.filter { |stmt| stmt.is_a?(Parser::AST::Node) && stmt.children[1] == :attr_writer }.map { |stmt| stmt.children[2].children[0].to_s }
+                        readers = block.children.filter { |stmt| stmt.is_a?(Parser::AST::Node) && stmt.children[1] == :attr_reader }.map { |stmt| stmt.children[2].children.first.to_s }
+                        writers = block.children.filter { |stmt| stmt.is_a?(Parser::AST::Node) && stmt.children[1] == :attr_writer }.map { |stmt| stmt.children[2].children.first.to_s }
                         accessors = block.children.filter { |stmt| stmt.is_a?(Parser::AST::Node) && stmt.children[1] == :attr_accessor }
+                        statics = block.children.filter { |stmt| stmt.is_a?(Parser::AST::Node) && stmt.type == :cvasgn }
                         inited_privates = block.children.filter { |stmt| stmt.is_a?(Parser::AST::Node) && stmt.type == :ivasgn }
                         initializer = get_class_initer_def(block)
 
-                        class_initializer(class_name, block, initializer, parent, readers, writers, accessors, inited_privates)
+                        class_initializer(class_name, block, initializer, parent, readers, writers, accessors, statics, inited_privates)
                         added_initializer = true
                     end
                 when :send
@@ -749,7 +758,7 @@ module RoGems
         end
 
         def module_def(node)
-            module_name = node.children[0].children[1].to_s
+            module_name = node.children.first.children[1].to_s
             block = node.children[1]
 
             writeln("--moduledef")
@@ -760,7 +769,7 @@ module RoGems
 
             unless block.nil? then
                 _, args, def_block = *block.children
-                new_block = block.updated(nil, ["#{module_name}:#{block.children[0].to_s}".to_sym, args, def_block])
+                new_block = block.updated(nil, ["#{module_name}:#{block.children.first.to_s}".to_sym, args, def_block])
                 walk_ast(new_block)
             end
 
@@ -792,13 +801,13 @@ module RoGems
                     added_keyword = true
                     write("local ")
                 end
-                var_name = name.children[0].to_s
+                var_name = name.children.first.to_s
                 write((name.type == :gvasgn ? var_name.gsub!("$", "") : var_name) + (name == names_node.children.last ? "" : ", "))
             end
             write(" = ")
 
             vals_node.children.each do |val|
-                write(val.children[0].to_s + (val == vals_node.children.last ? "" : ", "))
+                write(val.children.first.to_s + (val == vals_node.children.last ? "" : ", "))
             end
         end
 
@@ -834,7 +843,7 @@ module RoGems
         end
 
         def index_var(node)
-            write(node.children[0].to_s.strip)
+            write(node.children.first.to_s.strip)
         end
     end
 end
