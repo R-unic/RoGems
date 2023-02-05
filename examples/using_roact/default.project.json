@@ -11,7 +11,7 @@
 			"Common": {
 				"$path": "out/shared"
 			},
-            "RB_Include": {
+      "RB_Include": {
 				"$path": "rb_include"
 			},
 			"TS_Include": {

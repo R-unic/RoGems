@@ -1,4 +1,5 @@
 {
+  "include": ["**/*.tsx"],
 	"compilerOptions": {
 		"allowSyntheticDefaultImports": true,
 		"downlevelIteration": true,
