@@ -7,7 +7,7 @@
 
 # RoGems
 RoGems is a Ruby to Lua transpiler written for use with Roblox (like roblox-ts)
-
+It is **unfinished**.
 
 ## Examples
 See <a href="https://github.com/R-unic/RoGems/tree/master/examples">examples</a> for more
