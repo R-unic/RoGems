@@ -1,9 +1,0 @@
-{
-  "dependencies": {
-    "@rbxts/compiler-types": "^2.1.0-types.1",
-    "@rbxts/roact": "^1.4.4-ts.0",
-    "@rbxts/services": "^1.5.1",
-    "@rbxts/types": "^1.0.659",
-    "typescript": "^4.9.5"
-  }
-}

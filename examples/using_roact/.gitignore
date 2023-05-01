@@ -1,7 +1,0 @@
-# Project place file
-/using_roact.rbxlx
-node_modules
-
-# Roblox Studio lock files
-/*.rbxlx.lock
-/*.rbxl.lock
