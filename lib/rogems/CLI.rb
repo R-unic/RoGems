@@ -24,12 +24,6 @@ module RoGems
                 self.parse_options
 
                 check_installed("rojo")
-                check_installed("npm")
-                unless is_installed?("rbxtsc")
-                    success = system("npm i --quiet -g roblox-ts")
-                    raise Exceptions::FailToInstallRobloxTS.new unless success
-                end
-
                 enumeration = validate_init_mode(@options[:mode] || "game")
                 init_command = get_init_cmd(enumeration)
                 success = system(init_command)
@@ -38,21 +32,13 @@ module RoGems
                 default_rojo = File.read(path_from_lib("default_rojo.json")).gsub!("PROJECT_NAME", File.dirname("./"))
                 File.open("default.project.json", "w") { |f| f.write(default_rojo) }
 
-                FileUtils.touch("tsconfig.json")
-                default_tsconfig = File.read(path_from_lib("default_tsconfig.json"))
-                File.open("tsconfig.json", "w") { |f| f.write(default_tsconfig) }
-
                 default_rogems_json = File.read(path_from_lib("default_rogems.json"))
                 File.open("rogems.json", "w") { |f| f.write(default_rogems_json) }
-
-                ran_npm = system("npm i --quiet @rbxts/compiler-types @rbxts/types @rbxts/roact @rbxts/services typescript")
-                return unless ran_npm
 
                 FileUtils.mv("src", "out") # rename
                 Dir.glob("./out/**/*").filter { |f| File.file?(f) }.each { |f| File.delete(f) } # get rid of all the default crap
                 FileUtils.cp_r("out/.", "src", :remove_destination => true) # copy directories over
 
-                FileUtils.mkdir("ts_include")
                 FileUtils.mkdir("rb_include")
                 FileUtils.cp_r(path_from_lib("rb_include"), "rb_include", :remove_destination => false)
 

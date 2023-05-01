@@ -43,15 +43,10 @@ module RoGems
                 super("#{cmd.capitalize} could not be found. Please make sure it is installed and discoverable (i.e. you can run '#{cmd.downcase} -v').")
             end
         end
-        class FailToInstallRobloxTS < InitError
-            def initialize(cmd)
-                super("Failed to install roblox-ts.")
-            end
-        end
 
         class UnsupportedBitOpError < TranspileError
             def initialize(op)
-                super("Bitwise operators are not supported.")
+                super("Bitwise operators are not supported (yet).")
             end
         end
     end
